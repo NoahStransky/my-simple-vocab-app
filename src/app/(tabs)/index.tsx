@@ -18,6 +18,8 @@ export default function TabOneScreen() {
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const colorAnim = useRef(new Animated.Value(0)).current;
+  const numberScaleAnim = useRef(new Animated.Value(1)).current;
+  const milestoneColorAnim = useRef(new Animated.Value(0)).current;
 
   // Initialize database and load words
   useEffect(() => {
@@ -42,6 +44,58 @@ export default function TabOneScreen() {
   useEffect(() => {
     saveProgressToStorage();
   }, [rememberedCount, currentIndex, knownWords]);
+
+  // Add effect to animate number when rememberedCount changes
+  useEffect(() => {
+    if (rememberedCount > 0) {
+      numberScaleAnim.setValue(0.5);
+      const isMilestone = rememberedCount % 10 === 0;
+      
+      if (isMilestone) {
+        // Reset milestone color animation
+        milestoneColorAnim.setValue(0);
+        // Trigger milestone animation
+        Animated.parallel([
+          // Number pop animation
+          Animated.spring(numberScaleAnim, {
+            toValue: 1.2,
+            friction: 3,
+            tension: 100,
+            useNativeDriver: true,
+          }),
+          // Color pulse animation
+          Animated.sequence([
+            Animated.timing(milestoneColorAnim, {
+              toValue: 1,
+              duration: 500,
+              useNativeDriver: false,
+            }),
+            Animated.timing(milestoneColorAnim, {
+              toValue: 0,
+              duration: 500,
+              useNativeDriver: false,
+            }),
+          ]),
+        ]).start(() => {
+          // Return to normal size with bounce
+          Animated.spring(numberScaleAnim, {
+            toValue: 1,
+            friction: 4,
+            tension: 100,
+            useNativeDriver: true,
+          }).start();
+        });
+      } else {
+        // Normal number change animation
+        Animated.spring(numberScaleAnim, {
+          toValue: 1,
+          friction: 4,
+          tension: 100,
+          useNativeDriver: true,
+        }).start();
+      }
+    }
+  }, [rememberedCount]);
 
   const loadProgress = async () => {
     try {
@@ -70,26 +124,24 @@ export default function TabOneScreen() {
   };
 
   const animateMilestone = () => {
-    // Reset animations
     scaleAnim.setValue(1);
     rotateAnim.setValue(0);
     colorAnim.setValue(0);
 
-    // For Android, we'll use simpler animations with useNativeDriver
     Animated.parallel([
-      // Pulse animation
+      // Enhanced pulse animation with bounce
       Animated.sequence([
-        Animated.timing(scaleAnim, {
+        Animated.spring(scaleAnim, {
           toValue: 1.6,
-          duration: 300,
+          friction: 3,
+          tension: 40,
           useNativeDriver: true,
-          easing: Easing.out(Easing.ease),
         }),
-        Animated.timing(scaleAnim, {
+        Animated.spring(scaleAnim, {
           toValue: 1,
-          duration: 200,
+          friction: 3,
+          tension: 40,
           useNativeDriver: true,
-          easing: Easing.in(Easing.ease),
         }),
       ]),
       // Rotation animation
@@ -97,7 +149,7 @@ export default function TabOneScreen() {
         toValue: 1,
         duration: 600,
         useNativeDriver: true,
-        easing: Easing.linear,
+        easing: Easing.bezier(0.4, 0, 0.2, 1),
       }),
     ]).start();
   };
@@ -105,14 +157,18 @@ export default function TabOneScreen() {
   const animateNormalCount = () => {
     scaleAnim.setValue(1);
     Animated.sequence([
+      // Scale up quickly
       Animated.timing(scaleAnim, {
-        toValue: 1.2,
-        duration: 100,
+        toValue: 1.3,
+        duration: 150,
         useNativeDriver: true,
+        easing: Easing.bezier(0.2, 0.8, 0.2, 1),
       }),
-      Animated.timing(scaleAnim, {
+      // Bounce back with spring
+      Animated.spring(scaleAnim, {
         toValue: 1,
-        duration: 100,
+        friction: 3, // Lower friction for more bounce
+        tension: 40, // Lower tension for more bounce
         useNativeDriver: true,
       }),
     ]).start();
@@ -213,6 +269,11 @@ export default function TabOneScreen() {
 
     const isMilestone = rememberedCount > 0 && rememberedCount % 10 === 0;
 
+    const milestoneBackgroundColor = milestoneColorAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['rgba(255, 255, 255, 0.2)', 'rgba(255, 215, 0, 0.4)']
+    });
+
     return (
       <LinearGradient
         colors={['#4facfe', '#00f2fe']}
@@ -237,12 +298,16 @@ export default function TabOneScreen() {
                       { rotate: spin },
                       { perspective: 1000 }
                     ]
-                  })
+                  }),
+                  backgroundColor: isMilestone ? milestoneBackgroundColor : 'rgba(255, 255, 255, 0.2)'
                 }
               ]}>
                 <Animated.Text style={[
                   styles.counterNumber,
-                  isMilestone && styles.milestoneNumber
+                  isMilestone && styles.milestoneNumber,
+                  {
+                    transform: [{ scale: numberScaleAnim }]
+                  }
                 ]}>
                   {rememberedCount}
                 </Animated.Text>
@@ -271,21 +336,6 @@ export default function TabOneScreen() {
     );
   };
 
-  // Add a function to reset progress
-  const resetProgress = async () => {
-    try {
-      await Promise.all([
-        AsyncStorage.removeItem(STORAGE_KEY.REMEMBERED_COUNT),
-        AsyncStorage.removeItem(STORAGE_KEY.CURRENT_INDEX),
-        AsyncStorage.removeItem(STORAGE_KEY.KNOWN_WORDS),
-      ]);
-      setRememberedCount(0);
-      setCurrentIndex(0);
-      setKnownWords([]);
-    } catch (error) {
-      console.error('Error resetting progress:', error);
-    }
-  };
 
   if (!vocabularyWords[currentIndex]) {
     return null;
